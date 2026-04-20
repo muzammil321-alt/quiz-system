@@ -4,3 +4,4 @@ torch
 accelerate
 pypdf
 python-docx
+python-docx
