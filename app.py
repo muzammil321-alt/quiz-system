@@ -9,7 +9,7 @@ from docx import Document
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Muzammil AI Quiz Studio", page_icon="🎯", layout="wide")
 
-# Custom Professional CSS
+# Professional UI Styling
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #1e3c72; color: white; height: 3em; font-weight: bold; }
@@ -19,7 +19,7 @@ st.markdown("""
         margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .quiz-container b { color: #1e3c72 !important; font-size: 1.2em; }
-    .quiz-container p { color: #1a1a1a !important; white-space: pre-wrap; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .quiz-container p { color: #1a1a1a !important; white-space: pre-wrap; font-family: sans-serif; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,46 +55,44 @@ def create_docx(quizzes):
 if 'quizzes' not in st.session_state: st.session_state.quizzes = []
 
 st.title("🎯 Muzammil AI Quiz Studio")
-st.write("University Standard Assessment Tool - NUST Balochistan Campus")
+st.write("NUST Balochistan Campus - AI MCQ Generator")
 
 with st.sidebar:
     st.header("⚙️ Configuration")
     uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
     st.divider()
-    num_versions = st.slider("Total Quizzes", 1, 5, 1)
-    q_per_quiz = st.slider("MCQs per Quiz", 1, 5, 3)
-    difficulty = st.selectbox("Select Difficulty:", ["Normal", "Hard", "Expert"])
+    # Limits updated to 20
+    num_versions = st.slider("Total Quizzes", 1, 20, 1)
+    q_per_quiz = st.slider("MCQs per Quiz", 1, 20, 5)
+    difficulty = st.selectbox("Difficulty:", ["Normal", "Hard", "Expert"])
 
-if st.button("🚀 GENERATE MCQS"):
+if st.button("🚀 GENERATE MCQS NOW"):
     if uploaded_file:
         context = extract_text(uploaded_file)[:800]
         st.session_state.quizzes = []
         
         for i in range(1, num_versions + 1):
             full_quiz = ""
-            progress_text = f"Generating Quiz {i}..."
-            with st.status(progress_text) as status:
+            with st.status(f"Generating Quiz {i}...") as status:
                 for j in range(1, q_per_quiz + 1):
-                    # Mazeed sakht prompt (Strict Instructions)
+                    # SUPER STRICT PROMPT for better formatting
                     prompt = f"""Context: {context}
-Task: Create 1 Multiple Choice Question. 
+Task: Create 1 Multiple Choice Question (MCQ) with 4 options and an answer.
 Difficulty: {difficulty}
-Required Format:
-Question {j}: [Question Text]
-A) [Option]
-B) [Option]
-C) [Option]
-D) [Option]
+
+Format:
+Question {j}: [Question]
+A) [Opt]
+B) [Opt]
+C) [Opt]
+D) [Opt]
 Answer: [Correct Letter]
 
 Question {j}:"""
                     
-                    output = generator(prompt, max_new_tokens=300, do_sample=True, temperature=0.5, repetition_penalty=1.5)
+                    output = generator(prompt, max_new_tokens=350, do_sample=True, temperature=0.6, repetition_penalty=1.4)
                     res = output[0]['generated_text'].split(f"Question {j}:")[-1].strip()
-                    
-                    # Formatting check taakay text messy na ho
-                    formatted_q = f"Question {j}: {res}\n\n"
-                    full_quiz += formatted_q
+                    full_quiz += f"Question {j}: {res}\n\n"
                 
                 st.session_state.quizzes.append(full_quiz)
                 st.markdown(f"<div class='quiz-container'><b>📝 VERSION {i} ({difficulty})</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
@@ -104,4 +102,5 @@ Question {j}:"""
 
 if st.session_state.quizzes:
     st.divider()
-    st.download_button("📥 DOWNLOAD AS WORD FILE", data=create_docx(st.session_state.quizzes), file_name="Muzammil_Quizzes.docx")
+    docx_file = create_docx(st.session_state.quizzes)
+    st.download_button("📥 DOWNLOAD ALL (WORD FILE)", data=docx_file, file_name="Muzammil_AI_Quizzes.docx")
