@@ -9,7 +9,7 @@ from docx import Document
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Muzammil AI Quiz Studio", page_icon="🎯", layout="wide")
 
-# Custom CSS for High Visibility and Professional Look
+# Custom CSS for Professional Dark/Light UI
 st.markdown("""
     <style>
     .main { background-color: #f0f2f6; }
@@ -25,15 +25,14 @@ st.markdown("""
         margin-bottom: 20px; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .quiz-container b { color: #1e3c72 !important; font-size: 1.2em; }
-    .quiz-container p, .quiz-container div { color: #1a1a1a !important; white-space: pre-wrap; }
+    .quiz-container b { color: #1e3c72 !important; }
+    .quiz-container p, .quiz-container div { color: #1a1a1a !important; white-space: pre-wrap; font-family: sans-serif; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- MODEL LOADING ---
 @st.cache_resource
 def load_model_and_tokenizer():
-    # LaMini model size mein chota hai isliye free deployment mein stable rehta hai
     model_id = "MBZUAI/LaMini-GPT-124M" 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     model = AutoModelForCausalLM.from_pretrained(
@@ -46,7 +45,7 @@ def load_model_and_tokenizer():
 
 generator, tokenizer = load_model_and_tokenizer()
 
-# --- HELPER FUNCTIONS ---
+# --- HELPERS ---
 def extract_text(file):
     if file.name.endswith('.pdf'):
         reader = PdfReader(file)
@@ -58,7 +57,7 @@ def extract_text(file):
 
 def create_docx(quizzes):
     doc = Document()
-    doc.add_heading('🎯 Muzammil AI Quiz Studio - Professional Report', 0)
+    doc.add_heading('🎯 Muzammil AI Quiz Studio - Report', 0)
     for i, q in enumerate(quizzes, 1):
         doc.add_heading(f'Quiz Version {i}', level=1)
         doc.add_paragraph(q)
@@ -67,84 +66,65 @@ def create_docx(quizzes):
     doc.save(bio)
     return bio.getvalue()
 
-# --- SESSION STATE ---
+# --- UI ---
 if 'quizzes' not in st.session_state:
     st.session_state.quizzes = []
 
-# --- UI LAYOUT ---
 st.title("🎯 Muzammil AI Quiz Studio")
-st.write("University Standard MCQ Generator for NUST Balochistan Campus.")
+st.write("NUST Balochistan Campus AI Project")
 
 with st.sidebar:
     st.header("⚙️ Configuration")
-    uploaded_file = st.file_uploader("Upload Study Material (PDF/DOCX)", type=['pdf', 'docx'])
-    st.divider()
-    num_versions = st.slider("Total Quiz Versions", 1, 10, 1)
-    q_per_quiz = st.slider("MCQs per Quiz", 1, 10, 5)
-    diff = st.selectbox("Difficulty", ["Normal", "Hard", "Expert"])
+    uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
+    num_versions = st.slider("Total Quizzes", 1, 5, 1)
+    q_per_quiz = st.slider("MCQs per Quiz", 1, 10, 3)
+    diff = st.selectbox("Difficulty", ["Normal", "Hard"])
 
-# --- GENERATION LOGIC ---
-if st.button("🚀 GENERATE UNIQUE QUIZZES"):
+# --- GENERATION ---
+if st.button("🚀 GENERATE MCQS NOW"):
     if uploaded_file:
-        raw_text = extract_text(uploaded_file)
-        context = raw_text[:900] # Model ki memory ke mutabiq best limit
+        context = extract_text(uploaded_file)[:900]
         st.session_state.quizzes = []
         
         for i in range(1, num_versions + 1):
-            with st.spinner(f"Creating Unique Quiz Version {i}..."):
-                # SUPER STRICT PROMPT: Isse model bhatke ga nahi
-                prompt = f"""Task: Create exactly {q_per_quiz} Multiple Choice Questions based on the context.
-Rules:
-1. Provide a Question.
-2. Provide 4 options: A, B, C, D.
-3. Provide the Correct Answer.
-4. Do NOT repeat sentences from the context.
-
-Example:
-Question: What is the capital of Pakistan?
-A) Karachi B) Lahore C) Islamabad D) Quetta
-Answer: C
+            with st.spinner(f"Generating Quiz {i}..."):
+                # SUPER STRICT PROMPT
+                prompt = f"""Below is a context. Use it to create {q_per_quiz} Multiple Choice Questions.
+Each question must have:
+1. The Question.
+2. Four options: A), B), C), D).
+3. The correct Answer.
 
 Context: {context}
-Difficulty: {diff}
 
-Quiz #{i}:
-"""
+Quiz Version {i}:
+1."""
                 
                 output = generator(
                     prompt, 
-                    max_new_tokens=800, # Taakay poora quiz generate ho
+                    max_new_tokens=900, # Barha diya taakay options cut na hon
                     do_sample=True, 
-                    temperature=0.7, 
-                    repetition_penalty=1.3, # Stops loops like "sampling sampling"
+                    temperature=0.6,     # Kam kiya taakay model focus rahay
+                    repetition_penalty=1.4,
                     pad_token_id=tokenizer.eos_token_id
                 )
                 
-                # Cleanup output to show only the quiz
-                res = output[0]['generated_text'].split(f"Quiz #{i}:")[-1].strip()
+                res = output[0]['generated_text'].split(f"Quiz Version {i}:")[-1].strip()
+                # Adding back the "1." that we used to force the model
+                final_res = "1. " + res 
+                st.session_state.quizzes.append(final_res)
                 
-                if len(res) < 30: # Check if model failed
-                    res = "Error: Model could not generate a proper quiz. Please try with different text."
-                
-                st.session_state.quizzes.append(res)
-                
-                # Show in UI with forced visibility
                 st.markdown(f"""
                 <div class='quiz-container'>
                     <b>📝 VERSION {i}</b><br><br>
-                    <p>{res}</p>
+                    <p>{final_res}</p>
                 </div>
                 """, unsafe_allow_html=True)
     else:
-        st.error("Bhai, pehle document upload karein!")
+        st.error("Bhai, file upload karein!")
 
 # --- DOWNLOAD ---
 if st.session_state.quizzes:
     st.divider()
-    word_file = create_docx(st.session_state.quizzes)
-    st.download_button(
-        label="📥 DOWNLOAD ALL QUIZZES (WORD FILE)",
-        data=word_file,
-        file_name="Muzammil_AI_Quizzes.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
+    docx_file = create_docx(st.session_state.quizzes)
+    st.download_button("📥 DOWNLOAD WORD FILE", data=docx_file, file_name="Muzammil_Quizzes.docx")
