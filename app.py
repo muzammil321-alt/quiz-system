@@ -22,15 +22,13 @@ st.markdown("""
 def load_model():
     model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    # Low_cpu_mem_usage aur float16 optimize karne ke liye
+    # Streamlit Cloud ke liye mazeed optimize kiya hai
     model = AutoModelForCausalLM.from_pretrained(
         model_id, 
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-        low_cpu_mem_usage=True,
-        device_map="auto"
+        torch_dtype=torch.float32, # CPU ke liye float32 zyada stable hai
+        low_cpu_mem_usage=True
     )
     return pipeline("text-generation", model=model, tokenizer=tokenizer)
-
 generator = load_model()
 
 # --- HELPER FUNCTIONS ---
