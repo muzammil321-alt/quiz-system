@@ -1,15 +1,15 @@
 import streamlit as st
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 import docx
 from pypdf import PdfReader
 import io
 from docx import Document
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Muzammil AI Quiz Studio", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Muzammil AI Quiz Studio Pro", page_icon="🎯", layout="wide")
 
-# Professional UI Styling
+# Custom CSS for Visibility (Chaand bhai, isse text hamesha saaf nazar ayega)
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #1e3c72; color: white; height: 3em; font-weight: bold; }
@@ -18,20 +18,27 @@ st.markdown("""
         background-color: #ffffff !important; color: #1a1a1a !important; 
         margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .quiz-container b { color: #1e3c72 !important; font-size: 1.2em; }
+    .quiz-container b { color: #1e3c72 !important; }
     .quiz-container p { color: #1a1a1a !important; white-space: pre-wrap; font-family: sans-serif; }
     </style>
     """, unsafe_allow_html=True)
 
+# --- MODEL LOADING (FLAN-T5) ---
 @st.cache_resource
-def load_model_and_tokenizer():
-    model_id = "MBZUAI/LaMini-GPT-124M" 
+def load_pro_model():
+    # Ye model LaMini se boht behtar hai
+    model_id = "google/flan-t5-base" 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, low_cpu_mem_usage=True)
-    return pipeline("text-generation", model=model, tokenizer=tokenizer), tokenizer
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        model_id, 
+        torch_dtype=torch.float32, 
+        low_cpu_mem_usage=True
+    )
+    return pipeline("text2text-generation", model=model, tokenizer=tokenizer)
 
-generator, tokenizer = load_model_and_tokenizer()
+generator = load_pro_model()
 
+# --- HELPERS ---
 def extract_text(file):
     if file.name.endswith('.pdf'):
         reader = PdfReader(file)
@@ -43,64 +50,53 @@ def extract_text(file):
 
 def create_docx(quizzes):
     doc = Document()
-    doc.add_heading('🎯 Muzammil AI Quiz Studio Report', 0)
+    doc.add_heading('🎯 Muzammil AI Quiz Studio Pro', 0)
     for i, q in enumerate(quizzes, 1):
         doc.add_heading(f'Quiz Version {i}', level=1)
         doc.add_paragraph(q)
         doc.add_page_break()
-    bio = io.BytesIO()
-    doc.save(bio)
-    return bio.getvalue()
+    return doc
 
-if 'quizzes' not in st.session_state: st.session_state.quizzes = []
-
-st.title("🎯 Muzammil AI Quiz Studio")
-st.write("NUST Balochistan Campus - AI MCQ Generator")
+# --- UI ---
+st.title("🎯 Muzammil AI Quiz Studio PRO")
+st.write("University Standard MCQ Generator - NUST Balochistan Campus")
 
 with st.sidebar:
     st.header("⚙️ Configuration")
     uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
     st.divider()
-    # Limits updated to 20
+    # Limits set to 20 as requested
     num_versions = st.slider("Total Quizzes", 1, 20, 1)
     q_per_quiz = st.slider("MCQs per Quiz", 1, 20, 5)
-    difficulty = st.selectbox("Difficulty:", ["Normal", "Hard", "Expert"])
+    difficulty = st.selectbox("Difficulty:", ["Easy", "Standard", "Advanced"])
 
-if st.button("🚀 GENERATE MCQS NOW"):
+if st.button("🚀 GENERATE PROFESSIONAL MCQS"):
     if uploaded_file:
-        context = extract_text(uploaded_file)[:800]
+        context_raw = extract_text(uploaded_file)
+        context = context_raw[:1000] # Model ki stability ke liye
         st.session_state.quizzes = []
         
         for i in range(1, num_versions + 1):
             full_quiz = ""
             with st.status(f"Generating Quiz {i}...") as status:
                 for j in range(1, q_per_quiz + 1):
-                    # SUPER STRICT PROMPT for better formatting
-                    prompt = f"""Context: {context}
-Task: Create 1 Multiple Choice Question (MCQ) with 4 options and an answer.
-Difficulty: {difficulty}
-
-Format:
-Question {j}: [Question]
-A) [Opt]
-B) [Opt]
-C) [Opt]
-D) [Opt]
-Answer: [Correct Letter]
-
-Question {j}:"""
+                    # T5 style prompting
+                    prompt = f"generate a {difficulty} multiple choice question with 4 options (A, B, C, D) and the correct answer for this topic: {context}"
                     
-                    output = generator(prompt, max_new_tokens=350, do_sample=True, temperature=0.6, repetition_penalty=1.4)
-                    res = output[0]['generated_text'].split(f"Question {j}:")[-1].strip()
+                    output = generator(prompt, max_length=256, do_sample=True, temperature=0.7)
+                    res = output[0]['generated_text']
+                    
                     full_quiz += f"Question {j}: {res}\n\n"
                 
                 st.session_state.quizzes.append(full_quiz)
                 st.markdown(f"<div class='quiz-container'><b>📝 VERSION {i} ({difficulty})</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
-                status.update(label=f"Quiz {i} Ready!", state="complete")
+                status.update(label=f"Quiz {i} Complete!", state="complete")
     else:
         st.error("Bhai, file upload karein!")
 
-if st.session_state.quizzes:
-    st.divider()
-    docx_file = create_docx(st.session_state.quizzes)
-    st.download_button("📥 DOWNLOAD ALL (WORD FILE)", data=docx_file, file_name="Muzammil_AI_Quizzes.docx")
+# --- DOWNLOAD ---
+if 'quizzes' in st.session_state and st.session_state.quizzes:
+    doc = create_docx(st.session_state.quizzes)
+    bio = io.BytesIO()
+    doc.save(bio)
+    st.download_button("📥 DOWNLOAD WORD FILE", data=bio.getvalue(), file_name="Muzammil_Pro_Quizzes.docx")
