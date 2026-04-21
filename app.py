@@ -9,7 +9,7 @@ from docx import Document
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Muzammil AI Quiz Studio Pro", page_icon="🎯", layout="wide")
 
-# Custom CSS for Visibility (Chaand bhai, isse output professional lagega)
+# Professional UI Styling
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #1e3c72; color: white; height: 3em; font-weight: bold; }
@@ -26,10 +26,9 @@ st.markdown("""
 # --- MODEL LOADING (FLAN-T5) ---
 @st.cache_resource
 def load_pro_model():
-    # google/flan-t5-base is highly stable for Streamlit Cloud RAM
+    # Task ka naam hata diya hai taakay KeyError na aaye
     model_id = "google/flan-t5-base" 
-    # Directly loading pipeline to fix the KeyError issue
-    return pipeline("text2text-generation", model=model_id)
+    return pipeline(model=model_id)
 
 generator = load_pro_model()
 
@@ -54,9 +53,8 @@ def create_docx(quizzes):
 
 # --- UI ---
 st.title("🎯 Muzammil AI Quiz Studio PRO")
-st.write("University Standard MCQ Generator - NUST Balochistan Campus")
+st.write("NUST Balochistan Campus - Professional Assessment Tool")
 
-# Initialize session state for quizzes
 if 'quizzes' not in st.session_state:
     st.session_state.quizzes = []
 
@@ -64,7 +62,6 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
     st.divider()
-    # Limits set to 20 as requested by Chaand bhai
     num_versions = st.slider("Total Quizzes", 1, 20, 1)
     q_per_quiz = st.slider("MCQs per Quiz", 1, 20, 5)
     difficulty = st.selectbox("Difficulty:", ["Easy", "Standard", "Advanced"])
@@ -72,31 +69,29 @@ with st.sidebar:
 if st.button("🚀 GENERATE PROFESSIONAL MCQS"):
     if uploaded_file:
         context_raw = extract_text(uploaded_file)
-        context = context_raw[:1000] # Ensuring model focus
+        context = context_raw[:1000]
         st.session_state.quizzes = []
         
         for i in range(1, num_versions + 1):
             full_quiz = ""
             with st.status(f"Generating Quiz {i}...") as status:
                 for j in range(1, q_per_quiz + 1):
-                    # T5 works best with direct instruction prompts
-                    prompt = f"generate a {difficulty} multiple choice question with 4 options (A, B, C, D) and the correct answer based on this context: {context}"
+                    # Direct instruction prompt
+                    prompt = f"generate a {difficulty} multiple choice question with 4 options (A, B, C, D) and the correct answer from this context: {context}"
                     
-                    # Generate result
                     output = generator(prompt, max_length=256, do_sample=True, temperature=0.7)
                     res = output[0]['generated_text']
                     
                     full_quiz += f"Question {j}: {res}\n\n"
                 
                 st.session_state.quizzes.append(full_quiz)
-                st.markdown(f"<div class='quiz-container'><b>📝 VERSION {i} ({difficulty})</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='quiz-container'><b>📝 VERSION {i}</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
                 status.update(label=f"Quiz {i} Complete!", state="complete")
     else:
         st.error("Chaand bhai, pehle file upload karein!")
 
-# --- DOWNLOAD ---
 if st.session_state.quizzes:
     doc = create_docx(st.session_state.quizzes)
     bio = io.BytesIO()
     doc.save(bio)
-    st.download_button("📥 DOWNLOAD ALL (WORD FILE)", data=bio.getvalue(), file_name="Muzammil_Pro_Quizzes.docx")
+    st.download_button("📥 DOWNLOAD WORD FILE", data=bio.getvalue(), file_name="Muzammil_Pro_Quizzes.docx")
