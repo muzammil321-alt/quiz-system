@@ -1,6 +1,6 @@
 import streamlit as st
 import torch
-from transformers import pipeline
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import docx
 from pypdf import PdfReader
 import io
@@ -9,7 +9,7 @@ from docx import Document
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Muzammil AI Quiz Studio Pro", page_icon="🎯", layout="wide")
 
-# Professional UI
+# UI Styling
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #1e3c72; color: white; height: 3em; font-weight: bold; }
@@ -23,15 +23,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- MODEL LOADING (FIXED KEYERROR) ---
+# --- MANUAL MODEL LOADING (NO PIPELINE = NO KEYERROR) ---
 @st.cache_resource
-def load_pro_model():
-    # Task specify karna lazmi hai, but strictly for T5 models
-    # Agar text2text-generation nahi chal raha, toh summarization use karenge jo same logic hai
+def load_model_manually():
     model_id = "google/flan-t5-base"
-    return pipeline("summarization", model=model_id, device=-1)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+    return model, tokenizer
 
-generator = load_pro_model()
+model, tokenizer = load_model_manually()
 
 # --- HELPERS ---
 def extract_text(file):
@@ -54,19 +54,20 @@ def create_docx(quizzes):
 
 # --- UI ---
 st.title("🎯 Muzammil AI Quiz Studio PRO")
-st.write("NUST Balochistan Campus - Assignment Tool")
+st.write("NUST Balochistan Campus - Final Year Assessment Tool")
 
 if 'quizzes' not in st.session_state:
     st.session_state.quizzes = []
 
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("⚙️ Configuration")
     uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
+    st.divider()
     num_versions = st.slider("Total Quizzes", 1, 20, 1)
     q_per_quiz = st.slider("MCQs per Quiz", 1, 20, 5)
     difficulty = st.selectbox("Difficulty:", ["Easy", "Standard", "Advanced"])
 
-if st.button("🚀 GENERATE NOW"):
+if st.button("🚀 GENERATE PROFESSIONAL MCQS"):
     if uploaded_file:
         context = extract_text(uploaded_file)[:1000]
         st.session_state.quizzes = []
@@ -75,22 +76,23 @@ if st.button("🚀 GENERATE NOW"):
             full_quiz = ""
             with st.status(f"Generating Quiz {i}...") as status:
                 for j in range(1, q_per_quiz + 1):
-                    # Prompt designed to trigger T5 properly
-                    prompt = f"Using context: {context}. Create a {difficulty} MCQ with options A, B, C, D and Answer."
+                    prompt = f"Using this context: {context}. Create a {difficulty} MCQ with 4 options (A, B, C, D) and the correct answer."
                     
-                    output = generator(prompt, max_length=150, min_length=30, do_sample=True)
-                    res = output[0]['summary_text']
+                    # Manual Inference
+                    inputs = tokenizer(prompt, return_tensors="pt")
+                    outputs = model.generate(**inputs, max_length=256, do_sample=True, temperature=0.7)
+                    res = tokenizer.decode(outputs[0], skip_special_tokens=True)
                     
                     full_quiz += f"Question {j}: {res}\n\n"
                 
                 st.session_state.quizzes.append(full_quiz)
                 st.markdown(f"<div class='quiz-container'><b>📝 VERSION {i}</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
-                status.update(label=f"Quiz {i} Done!", state="complete")
+                status.update(label=f"Quiz {i} Complete!", state="complete")
     else:
         st.error("Chaand bhai, file load karein!")
 
 if st.session_state.quizzes:
-    doc_file = create_docx(st.session_state.quizzes)
+    doc = create_docx(st.session_state.quizzes)
     bio = io.BytesIO()
-    doc_file.save(bio)
-    st.download_button("📥 DOWNLOAD WORD FILE", data=bio.getvalue(), file_name="Muzammil_Quizzes.docx")
+    doc.save(bio)
+    st.download_button("📥 DOWNLOAD WORD FILE", data=bio.getvalue(), file_name="Muzammil_Pro_Quizzes.docx")
