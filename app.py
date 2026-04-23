@@ -1,6 +1,6 @@
 import streamlit as st
 import torch
-from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import pipeline
 import docx
 from pypdf import PdfReader
 import io
@@ -23,12 +23,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- MODEL LOADING (STABLE FIX) ---
+# --- MODEL LOADING (FINAL STABLE FIX) ---
 @st.cache_resource
 def load_pro_model():
     model_id = "google/flan-t5-base"
-    # Task specify kiye baghair pipeline load kar rahay hain taakay KeyError na aaye
-    return pipeline(model=model_id, device=-1) # device=-1 ensures CPU usage for Streamlit
+    # Task specify karna lazmi hai: "text2text-generation"
+    # Device=-1 ensures it uses CPU on Streamlit Cloud
+    return pipeline("text2text-generation", model=model_id, device=-1)
 
 generator = load_pro_model()
 
@@ -62,6 +63,7 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
     st.divider()
+    # Limits set as per Chaand bhai's request
     num_versions = st.slider("Total Quizzes", 1, 20, 1)
     q_per_quiz = st.slider("MCQs per Quiz", 1, 20, 5)
     difficulty = st.selectbox("Difficulty:", ["Easy", "Standard", "Advanced"])
@@ -76,7 +78,7 @@ if st.button("🚀 GENERATE PROFESSIONAL MCQS"):
             full_quiz = ""
             with st.status(f"Generating Quiz {i}...") as status:
                 for j in range(1, q_per_quiz + 1):
-                    # Optimized prompt for Flan-T5
+                    # Instruction for Flan-T5
                     prompt = f"Using this context: {context}. Create a {difficulty} MCQ with 4 options and the answer."
                     
                     output = generator(prompt, max_length=256, do_sample=True, temperature=0.7)
