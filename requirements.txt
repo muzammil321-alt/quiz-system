@@ -1,9 +1,5 @@
 streamlit
-
 transformers
-
-torch 
-
-einops 
-pypdf 
+torch
+pypdf
 python-docx
