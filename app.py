@@ -1,13 +1,13 @@
 import streamlit as st
 import torch
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import docx
 from pypdf import PdfReader
 import io
 from docx import Document
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Muzammil AI Quiz Studio Pro", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Muzi AI Quiz Studio", page_icon="🎯", layout="wide")
 
 # UI Styling
 st.markdown("""
@@ -18,20 +18,19 @@ st.markdown("""
         background-color: #ffffff !important; color: #1a1a1a !important; 
         margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .quiz-container b { color: #1e3c72 !important; }
-    .quiz-container p { color: #1a1a1a !important; white-space: pre-wrap; }
+    .quiz-container * { color: #1a1a1a !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- MANUAL MODEL LOADING (NO PIPELINE = NO KEYERROR) ---
+# --- MODEL LOADING (PHI-1.5: Better Reasoning) ---
 @st.cache_resource
-def load_model_manually():
-    model_id = "google/flan-t5-base"
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+def load_phi_model():
+    model_id = "microsoft/phi-1_5"
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, trust_remote_code=True)
     return model, tokenizer
 
-model, tokenizer = load_model_manually()
+model, tokenizer = load_phi_model()
 
 # --- HELPERS ---
 def extract_text(file):
@@ -43,56 +42,29 @@ def extract_text(file):
         return "\n".join([p.text for p in doc.paragraphs])
     return ""
 
-def create_docx(quizzes):
-    doc = Document()
-    doc.add_heading('🎯 Muzammil AI Quiz Studio Pro Report', 0)
-    for i, q in enumerate(quizzes, 1):
-        doc.add_heading(f'Quiz Version {i}', level=1)
-        doc.add_paragraph(q)
-        doc.add_page_break()
-    return doc
-
 # --- UI ---
-st.title("🎯 Muzammil AI Quiz Studio PRO")
-st.write("NUST Balochistan Campus - Final Year Assessment Tool")
-
-if 'quizzes' not in st.session_state:
-    st.session_state.quizzes = []
+st.title("🎯 Muzi AI Quiz Studio")
+st.write("NUST Balochistan Campus - Journey Start")
 
 with st.sidebar:
-    st.header("⚙️ Configuration")
-    uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
-    st.divider()
-    num_versions = st.slider("Total Quizzes", 1, 20, 1)
-    q_per_quiz = st.slider("MCQs per Quiz", 1, 20, 5)
-    difficulty = st.selectbox("Difficulty:", ["Easy", "Standard", "Advanced"])
+    uploaded_file = st.file_uploader("Upload PDF/DOCX", type=['pdf', 'docx'])
+    q_count = st.slider("MCQs per Quiz", 1, 10, 3)
 
-if st.button("🚀 GENERATE PROFESSIONAL MCQS"):
+if st.button("🚀 GENERATE MCQS"):
     if uploaded_file:
-        context = extract_text(uploaded_file)[:1000]
-        st.session_state.quizzes = []
+        context = extract_text(uploaded_file)[:700]
+        full_quiz = ""
         
-        for i in range(1, num_versions + 1):
-            full_quiz = ""
-            with st.status(f"Generating Quiz {i}...") as status:
-                for j in range(1, q_per_quiz + 1):
-                    prompt = f"Using this context: {context}. Create a {difficulty} MCQ with 4 options (A, B, C, D) and the correct answer."
-                    
-                    # Manual Inference
-                    inputs = tokenizer(prompt, return_tensors="pt")
-                    outputs = model.generate(**inputs, max_length=256, do_sample=True, temperature=0.7)
-                    res = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                    
-                    full_quiz += f"Question {j}: {res}\n\n"
+        with st.status("Thinking like a Professor...") as status:
+            for j in range(1, q_count + 1):
+                # Phi model prompt format
+                prompt = f"Instruct: Based on the context: {context}. Create MCQ {j} with options A, B, C, D and Answer.\nOutput:"
                 
-                st.session_state.quizzes.append(full_quiz)
-                st.markdown(f"<div class='quiz-container'><b>📝 VERSION {i}</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
-                status.update(label=f"Quiz {i} Complete!", state="complete")
-    else:
-        st.error("Chaand bhai, file load karein!")
-
-if st.session_state.quizzes:
-    doc = create_docx(st.session_state.quizzes)
-    bio = io.BytesIO()
-    doc.save(bio)
-    st.download_button("📥 DOWNLOAD WORD FILE", data=bio.getvalue(), file_name="Muzammil_Pro_Quizzes.docx")
+                inputs = tokenizer(prompt, return_tensors="pt", return_attention_mask=False)
+                outputs = model.generate(**inputs, max_length=300, do_sample=True, temperature=0.7)
+                res = tokenizer.decode(outputs[0], skip_special_tokens=True).split("Output:")[-1].strip()
+                
+                full_quiz += f"{res}\n\n"
+            
+            st.markdown(f"<div class='quiz-container'><b>📝 GENERATED QUIZ</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
+            status.update(label="Ready!", state="complete")
