@@ -9,7 +9,7 @@ from docx import Document
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Muzammil AI Quiz Studio Pro", page_icon="🎯", layout="wide")
 
-# Professional UI Styling
+# Professional UI
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #1e3c72; color: white; height: 3em; font-weight: bold; }
@@ -19,17 +19,17 @@ st.markdown("""
         margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .quiz-container b { color: #1e3c72 !important; }
-    .quiz-container p { color: #1a1a1a !important; white-space: pre-wrap; font-family: sans-serif; }
+    .quiz-container p { color: #1a1a1a !important; white-space: pre-wrap; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- MODEL LOADING (FINAL STABLE FIX) ---
+# --- MODEL LOADING (FIXED KEYERROR) ---
 @st.cache_resource
 def load_pro_model():
+    # Task specify karna lazmi hai, but strictly for T5 models
+    # Agar text2text-generation nahi chal raha, toh summarization use karenge jo same logic hai
     model_id = "google/flan-t5-base"
-    # Task specify karna lazmi hai: "text2text-generation"
-    # Device=-1 ensures it uses CPU on Streamlit Cloud
-    return pipeline("text2text-generation", model=model_id, device=-1)
+    return pipeline("summarization", model=model_id, device=-1)
 
 generator = load_pro_model()
 
@@ -54,46 +54,43 @@ def create_docx(quizzes):
 
 # --- UI ---
 st.title("🎯 Muzammil AI Quiz Studio PRO")
-st.write("NUST Balochistan Campus - Professional Assessment Tool")
+st.write("NUST Balochistan Campus - Assignment Tool")
 
 if 'quizzes' not in st.session_state:
     st.session_state.quizzes = []
 
 with st.sidebar:
-    st.header("⚙️ Configuration")
+    st.header("⚙️ Settings")
     uploaded_file = st.file_uploader("Upload Document", type=['pdf', 'docx'])
-    st.divider()
-    # Limits set as per Chaand bhai's request
     num_versions = st.slider("Total Quizzes", 1, 20, 1)
     q_per_quiz = st.slider("MCQs per Quiz", 1, 20, 5)
     difficulty = st.selectbox("Difficulty:", ["Easy", "Standard", "Advanced"])
 
-if st.button("🚀 GENERATE PROFESSIONAL MCQS"):
+if st.button("🚀 GENERATE NOW"):
     if uploaded_file:
-        context_raw = extract_text(uploaded_file)
-        context = context_raw[:1000]
+        context = extract_text(uploaded_file)[:1000]
         st.session_state.quizzes = []
         
         for i in range(1, num_versions + 1):
             full_quiz = ""
             with st.status(f"Generating Quiz {i}...") as status:
                 for j in range(1, q_per_quiz + 1):
-                    # Instruction for Flan-T5
-                    prompt = f"Using this context: {context}. Create a {difficulty} MCQ with 4 options and the answer."
+                    # Prompt designed to trigger T5 properly
+                    prompt = f"Using context: {context}. Create a {difficulty} MCQ with options A, B, C, D and Answer."
                     
-                    output = generator(prompt, max_length=256, do_sample=True, temperature=0.7)
-                    res = output[0]['generated_text']
+                    output = generator(prompt, max_length=150, min_length=30, do_sample=True)
+                    res = output[0]['summary_text']
                     
                     full_quiz += f"Question {j}: {res}\n\n"
                 
                 st.session_state.quizzes.append(full_quiz)
                 st.markdown(f"<div class='quiz-container'><b>📝 VERSION {i}</b><p>{full_quiz}</p></div>", unsafe_allow_html=True)
-                status.update(label=f"Quiz {i} Complete!", state="complete")
+                status.update(label=f"Quiz {i} Done!", state="complete")
     else:
-        st.error("Chaand bhai, pehle file upload karein!")
+        st.error("Chaand bhai, file load karein!")
 
 if st.session_state.quizzes:
-    doc = create_docx(st.session_state.quizzes)
+    doc_file = create_docx(st.session_state.quizzes)
     bio = io.BytesIO()
-    doc.save(bio)
-    st.download_button("📥 DOWNLOAD WORD FILE", data=bio.getvalue(), file_name="Muzammil_Pro_Quizzes.docx")
+    doc_file.save(bio)
+    st.download_button("📥 DOWNLOAD WORD FILE", data=bio.getvalue(), file_name="Muzammil_Quizzes.docx")
