@@ -1,6 +1,6 @@
 import streamlit as st
 import torch
-from transformers import pipeline
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 import docx
 from pypdf import PdfReader
 import io
@@ -9,7 +9,7 @@ from docx import Document
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Muzammil AI Quiz Studio Pro", page_icon="🎯", layout="wide")
 
-# Professional UI Styling
+# Professional UI Styling (Chaand bhai, visibility check karli hai)
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #1e3c72; color: white; height: 3em; font-weight: bold; }
@@ -23,12 +23,16 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- MODEL LOADING (FLAN-T5) ---
+# --- MODEL LOADING (FLAN-T5 FIXED) ---
 @st.cache_resource
 def load_pro_model():
-    # Task ka naam hata diya hai taakay KeyError na aaye
-    model_id = "google/flan-t5-base" 
-    return pipeline(model=model_id)
+    model_id = "google/flan-t5-base"
+    # Tokenizer aur Model ko alag se load kar rahay hain taakay error na aaye
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+    
+    # Task specify karna zaroori hai: "text2text-generation"
+    return pipeline("text2text-generation", model=model, tokenizer=tokenizer)
 
 generator = load_pro_model()
 
@@ -53,7 +57,7 @@ def create_docx(quizzes):
 
 # --- UI ---
 st.title("🎯 Muzammil AI Quiz Studio PRO")
-st.write("NUST Balochistan Campus - Professional Assessment Tool")
+st.write("University Standard Assessment Tool - NUST Balochistan Campus")
 
 if 'quizzes' not in st.session_state:
     st.session_state.quizzes = []
@@ -69,15 +73,15 @@ with st.sidebar:
 if st.button("🚀 GENERATE PROFESSIONAL MCQS"):
     if uploaded_file:
         context_raw = extract_text(uploaded_file)
-        context = context_raw[:1000]
+        context = context_raw[:1000] # Ensuring model focus
         st.session_state.quizzes = []
         
         for i in range(1, num_versions + 1):
             full_quiz = ""
             with st.status(f"Generating Quiz {i}...") as status:
                 for j in range(1, q_per_quiz + 1):
-                    # Direct instruction prompt
-                    prompt = f"generate a {difficulty} multiple choice question with 4 options (A, B, C, D) and the correct answer from this context: {context}"
+                    # Direct instruction prompt for FLAN-T5
+                    prompt = f"Using this context: {context}. Generate a {difficulty} MCQ with 4 options (A, B, C, D) and the correct answer."
                     
                     output = generator(prompt, max_length=256, do_sample=True, temperature=0.7)
                     res = output[0]['generated_text']
